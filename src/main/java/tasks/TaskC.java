@@ -12,6 +12,8 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+// Write job(s) that reports for each country, how many of its citizens have a Facebook page
+
 public class TaskC {
 
     public static class CountryMapper
@@ -57,18 +59,4 @@ public class TaskC {
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
-
-    // public static void main(String[] args) throws Exception {
-    // Configuration conf = new Configuration();
-    // Job job = Job.getInstance(conf, "word count");
-    // job.setJarByClass(TaskC.class);
-    // job.setMapperClass(TokenizerMapper.class);
-    // job.setCombinerClass(IntSumReducer.class);
-    // job.setReducerClass(IntSumReducer.class);
-    // job.setOutputKeyClass(Text.class);
-    // job.setOutputValueClass(IntWritable.class);
-    // FileInputFormat.addInputPath(job, new Path(args[1]));
-    // FileOutputFormat.setOutputPath(job, new Path(args[2]));
-    // System.exit(job.waitForCompletion(true) ? 0 : 1);
-    // }
 }
