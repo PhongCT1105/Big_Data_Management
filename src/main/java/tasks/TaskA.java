@@ -1,3 +1,5 @@
+package tasks;
+
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -8,13 +10,16 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+// Report all Facebook users (name, and hobby) whose Nationality is the same as your
+// own Nationality (pick one, e.g., “American” or “Indian”, etc.).
+
 public class TaskA {
 
     // Mapper Class
     public static class NationalityMapper extends Mapper<Object, Text, Text, Text> {
         private Text name = new Text();
         private Text hobby = new Text();
-        private final String targetNationality = "Thailand"; // Change this as needed
+        private final String targetNationality = "Nauru"; // Change this as needed
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
@@ -36,23 +41,6 @@ public class TaskA {
     }
 
     public void debug(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "nationality filter");
-        job.setJarByClass(TaskA.class);
-        job.setMapperClass(NationalityMapper.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
-
-        // **Set number of reducers to 0 to avoid using a reducer**
-        job.setNumReduceTasks(0);
-
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
-    }
-
-    public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "nationality filter");
         job.setJarByClass(TaskA.class);
