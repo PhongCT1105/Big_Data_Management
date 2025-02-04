@@ -132,4 +132,31 @@ public class TaskG {
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 
+    public static void main(String[] args) throws Exception {
+        String log_csv = args[1] + "/access_logs.csv";
+        String page_csv = args[1] + "/pages.csv";
+
+        Configuration conf = new Configuration();
+
+        // Set the current date in configuration
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        conf.set("currentDate", dateFormat.format(new Date()));
+
+        System.out.println("Current Date: " + conf.get("currentDate"));
+
+        Job job = Job.getInstance(conf, "inactivity log");
+        job.setJarByClass(TaskC.class);
+
+        MultipleInputs.addInputPath(job, new Path(log_csv), TextInputFormat.class, LogMapper.class);
+        MultipleInputs.addInputPath(job, new Path(page_csv), TextInputFormat.class, PageMapper.class);
+
+        job.setReducerClass(InactivtyReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileOutputFormat.setOutputPath(job, new Path(args[2]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
 }
