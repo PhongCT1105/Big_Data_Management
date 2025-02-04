@@ -2,6 +2,7 @@ import org.junit.Test;
 
 import tasks.TaskA;
 import tasks.TaskC;
+import tasks.TaskE;
 
 public class Project1Test {
     // Change path as needed!
@@ -29,6 +30,20 @@ public class Project1Test {
         try {
             System.out.println("Input Path: " + input[0]);
             taskC.debug(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testTaskE() {
+        TaskE taskE = new TaskE();
+        String[] input = new String[2];
+        input[0] = path + "access_logs.csv";
+        input[1] = path + "E_output";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskE.debug(input);
         } catch (Exception e) {
             e.printStackTrace();
         }

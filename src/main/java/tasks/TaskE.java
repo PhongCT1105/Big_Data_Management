@@ -1,6 +1,8 @@
 package tasks;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -25,10 +27,8 @@ public class TaskE {
         private Text page = new Text();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
-            String[] fields = line.split(",");
+            String[] fields = value.toString().split(",");
 
-            // Ignore the header row
             if (key.toString().equals("0"))
                 return;
 
@@ -43,10 +43,55 @@ public class TaskE {
         }
     }
 
-    // Reducer Class
-    public static class IntSumReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
-        private IntWritable result = new IntWritable();
+    // Combiner Class
+    // Goal would be to combine the values for each key
+    public static class AccessReducer extends Reducer<Text, Text, Text, Text> {
+        // private IntWritable result = new IntWritable();
+
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            int totalAccesses = 0;
+            Set<String> distinctPages = new HashSet<>();
+
+            for (Text val : values) {
+                totalAccesses++;
+                distinctPages.add(val.toString());
+            }
+
+            String result = totalAccesses + "," + distinctPages.size();
+            context.write(key, new Text(result));
+        }
     }
 
+    // Reducer Class
+    // Goal would be to return the total number of accesses and the number of
+    // distinct pages
+    // public static class IntSumReducer extends Reducer<Text, IntWritable, Text,
+    // IntWritable> {
+    // private IntWritable result = new IntWritable();
+
+    // public void reduce(Text key, Iterable<IntWritable> values, Context context)
+    // throws IOException, InterruptedException {
+    // int sum = 0;
+    // for (IntWritable val : values) {
+    // sum += val.get();
+    // }
+    // result.set(sum);
+    // context.write(key, result);
+    // }
+    // }
+
     // Debug Method
+    public void debug(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "access count");
+        job.setJarByClass(TaskE.class);
+        job.setMapperClass(AccessMapper.class);
+        // job.setCombinerClass(AccessCombiner.class);
+        job.setReducerClass(AccessReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
 }
