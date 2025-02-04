@@ -3,6 +3,7 @@ import org.junit.Test;
 import tasks.TaskA;
 import tasks.TaskC;
 import tasks.TaskE;
+import tasks.TaskG;
 
 public class Project1Test {
     // Change path as needed!
@@ -13,7 +14,7 @@ public class Project1Test {
         TaskA taskA = new TaskA();
         String[] input = new String[2];
         input[0] = path + "pages.csv";
-        input[1] = path + "A_output";
+        input[1] = path + "output/A";
         try {
             taskA.debug(input);
         } catch (Exception e) {
@@ -26,7 +27,7 @@ public class Project1Test {
         TaskC taskC = new TaskC();
         String[] input = new String[2];
         input[0] = path + "pages.csv";
-        input[1] = path + "C_output";
+        input[1] = path + "output/C";
         try {
             System.out.println("Input Path: " + input[0]);
             taskC.debug(input);
@@ -40,10 +41,25 @@ public class Project1Test {
         TaskE taskE = new TaskE();
         String[] input = new String[2];
         input[0] = path + "access_logs.csv";
-        input[1] = path + "E_output";
+        input[1] = path + "output/E";
         try {
             System.out.println("Input Path: " + input[0]);
             taskE.debug(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testTaskG() {
+        TaskG taskG = new TaskG();
+        String[] input = new String[3];
+        input[0] = path + "access_logs.csv";
+        input[1] = path + "pages.csv";
+        input[2] = path + "output/G";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskG.debug(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
