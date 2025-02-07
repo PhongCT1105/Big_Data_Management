@@ -4,10 +4,15 @@ import tasks.TaskA;
 import tasks.TaskC;
 import tasks.TaskE;
 import tasks.TaskG;
+import tasks.TaskB;
 
 public class Project1Test {
     // Change path as needed!
-    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
+//    Sandi Path
+//    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
+
+//    Phong Path
+    public final static String path = "C:/Study/CS4433/Big_Data_Management/";
 
     @Test
     public void testTaskA() {
@@ -60,6 +65,21 @@ public class Project1Test {
         try {
             System.out.println("Input Path: " + input[0]);
             taskG.debug(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testTaskB() {
+        TaskB taskB = new TaskB();
+        String[] input = new String[3];
+        input[0] = path + "access_logs.csv";
+        input[1] = path + "pages.csv";
+        input[2] = path + "output/B";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskB.debug(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
