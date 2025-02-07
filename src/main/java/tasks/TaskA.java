@@ -86,7 +86,7 @@ public class TaskA {
     }
 
     // Optimized: Map-only job
-    public static void maponly(String[] args) throws Exception {
+    public static void optimized(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "nationality filter");
         job.setJarByClass(TaskA.class);
@@ -103,7 +103,7 @@ public class TaskA {
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 
-    // Optimized solution for running over HDFS
+    // Optimized solution for HDFS
     public static void main(String[] args) throws Exception {
         String csv_path = args[1] + "/pages.csv";
 

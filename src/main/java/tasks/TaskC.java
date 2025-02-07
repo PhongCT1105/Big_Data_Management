@@ -16,26 +16,24 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class TaskC {
 
+    // Mapper Class
     public static class CountryMapper extends Mapper<Object, Text, Text, IntWritable> {
-
         private final static IntWritable one = new IntWritable(1);
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String[] fields = value.toString().split(",");
 
-            if (fields.length >= 5) {
-                String country = fields[2].trim();
-                context.write(new Text(country), one);
-            }
+            String country = fields[2].trim();
+            context.write(new Text(country), one);
         }
     }
 
-    public static class IntSumReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    // Reducer Class
+    public static class CountryReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
         private IntWritable result = new IntWritable();
 
         public void reduce(Text key, Iterable<IntWritable> values, Context context)
                 throws IOException, InterruptedException {
-
             int sum = 0;
             for (IntWritable val : values) {
                 sum += val.get();
@@ -45,13 +43,28 @@ public class TaskC {
         }
     }
 
-    public void debug(String[] args) throws Exception {
+    // Combiner Class
+    public static class CountryCombiner extends Reducer<Text, IntWritable, Text, IntWritable> {
+        private IntWritable result = new IntWritable();
+
+        public void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            result.set(sum);
+            context.write(key, result);
+        }
+    }
+
+    // Map-Reduce job
+    public void basic(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "word count");
+        Job job = Job.getInstance(conf, "country citizen counter");
         job.setJarByClass(TaskC.class);
         job.setMapperClass(CountryMapper.class);
-        // job.setCombinerClass(IntSumReducer.class);
-        job.setReducerClass(IntSumReducer.class);
+        job.setReducerClass(CountryReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
         FileInputFormat.addInputPath(job, new Path(args[0]));
@@ -59,16 +72,29 @@ public class TaskC {
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 
-    public static void main(String[] args) throws Exception {
-        String csv_path = args[1] + "/pages.csv";
-
-        // Without Combiner
+    // Map-Reduce combiner job
+    public void optimized(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "word count");
+        Job job = Job.getInstance(conf, "country citizen counter");
         job.setJarByClass(TaskC.class);
         job.setMapperClass(CountryMapper.class);
-        // job.setCombinerClass(IntSumReducer.class);
-        job.setReducerClass(IntSumReducer.class);
+        job.setCombinerClass(CountryCombiner.class); // Added combiner
+        job.setReducerClass(CountryReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
+    // Optimized solution for HDFS
+    public static void main(String[] args) throws Exception {
+        String csv_path = args[1] + "/pages.csv";
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "country citizen counter");
+        job.setJarByClass(TaskC.class);
+        job.setMapperClass(CountryMapper.class);
+        job.setReducerClass(CountryReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
         FileInputFormat.addInputPath(job, new Path(csv_path));

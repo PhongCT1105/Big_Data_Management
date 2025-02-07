@@ -27,35 +27,63 @@ public class Project1Test {
         input[0] = path + "pages.csv";
         input[1] = output + "optimized-A";
         try {
-            TaskA.maponly(input);
+            TaskA.optimized(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     @Test
-    public void testTaskC() {
+    public void basicTaskC() {
         TaskC taskC = new TaskC();
         String[] input = new String[2];
         input[0] = path + "pages.csv";
-        input[1] = path + "output/C";
+        input[1] = output + "C";
         try {
             System.out.println("Input Path: " + input[0]);
-            taskC.debug(input);
+            taskC.basic(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     @Test
-    public void testTaskE() {
+    public void optimizedTaskC() {
+        TaskC taskC = new TaskC();
+        String[] input = new String[2];
+        input[0] = path + "pages.csv";
+        input[1] = output + "optimized-C";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskC.optimized(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void basicTaskE() {
         TaskE taskE = new TaskE();
         String[] input = new String[2];
         input[0] = path + "access_logs.csv";
-        input[1] = path + "output/E";
+        input[1] = output + "E";
         try {
             System.out.println("Input Path: " + input[0]);
-            taskE.debug(input);
+            taskE.basic(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void optimizedTaskE() {
+        TaskE taskE = new TaskE();
+        String[] input = new String[2];
+        input[0] = path + "access_logs.csv";
+        input[1] = output + "optimized-E";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskE.optimized(input);
         } catch (Exception e) {
             e.printStackTrace();
         }

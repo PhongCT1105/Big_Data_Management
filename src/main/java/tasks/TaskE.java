@@ -20,7 +20,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 public class TaskE {
 
     // Mapper Class
-    public static class AccessMapper extends Mapper<Object, Text, Text, Text> {
+    public static class AccessLogMapper extends Mapper<Object, Text, Text, Text> {
         private Text person = new Text();
         private Text page = new Text();
 
@@ -30,41 +30,63 @@ public class TaskE {
             if (key.toString().equals("0"))
                 return;
 
-            if (fields.length >= 5) { // Ensure at least 5 columns exist
-                String personID = fields[1].trim(); // PersonID column
-                String pageID = fields[2].trim(); // PageID column
+            String personID = fields[1].trim();
+            String pageID = "1," + fields[2].trim(); // Leading one to count pages
 
-                person.set(personID);
-                page.set(pageID);
-                context.write(person, page);
-            }
+            person.set(personID);
+            page.set(pageID);
+            context.write(person, page);
         }
     }
 
     // Reducer Class
-    public static class AccessReducer extends Reducer<Text, Text, Text, Text> {
+    public static class AccessLogReducer extends Reducer<Text, Text, Text, Text> {
 
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             int totalAccesses = 0;
-            Set<String> distinctPages = new HashSet<>();
+            HashSet<String> distinctPages = new HashSet<>();
 
             for (Text val : values) {
-                totalAccesses++;
-                distinctPages.add(val.toString());
-            }
+                String[] parts = val.toString().split(",");
+                totalAccesses += Integer.parseInt(parts[0]);
 
-            String result = totalAccesses + "," + distinctPages.size();
-            context.write(key, new Text(result));
+                for (int i = 1; i < parts.length; i++) {
+                    distinctPages.add(parts[i]);
+                }
+            }
+            context.write(key, new Text(totalAccesses + "," + distinctPages.size()));
         }
     }
 
-    // Debug Method
-    public void debug(String[] args) throws Exception {
+    // Combiner Class
+    public static class AccessLogCombiner extends Reducer<Text, Text, Text, Text> {
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            int totalAccesses = 0;
+            HashSet<String> distinctPages = new HashSet<>();
+
+            for (Text val : values) {
+                String[] parts = val.toString().split(",");
+                totalAccesses += Integer.parseInt(parts[0]);
+
+                for (int i = 1; i < parts.length; i++) {
+                    distinctPages.add(parts[i]);
+                }
+            }
+            String pages = ","; // Start with comma for easy concatenation
+            for (String page : distinctPages) {
+                pages += page + ",";
+            }
+            context.write(key, new Text(totalAccesses + pages));
+        }
+    }
+
+    // Map-Reduce Method
+    public void basic(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "access count");
         job.setJarByClass(TaskE.class);
-        job.setMapperClass(AccessMapper.class);
-        job.setReducerClass(AccessReducer.class);
+        job.setMapperClass(AccessLogMapper.class);
+        job.setReducerClass(AccessLogReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job, new Path(args[0]));
@@ -72,14 +94,31 @@ public class TaskE {
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 
+    // Map-Reduce Combiner Method
+    public void optimized(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "access count");
+        job.setJarByClass(TaskE.class);
+        job.setMapperClass(AccessLogMapper.class);
+        job.setCombinerClass(AccessLogCombiner.class); // Added combiner
+        job.setReducerClass(AccessLogReducer.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
+    // Optimized solution for HDFS
     public static void main(String[] args) throws Exception {
         String csv_path = args[1] + "/access_logs.csv";
 
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "access count");
         job.setJarByClass(TaskE.class);
-        job.setMapperClass(AccessMapper.class);
-        job.setReducerClass(AccessReducer.class);
+        job.setMapperClass(AccessLogMapper.class);
+        job.setCombinerClass(AccessLogCombiner.class); // Added combiner
+        job.setReducerClass(AccessLogReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job, new Path(csv_path));
