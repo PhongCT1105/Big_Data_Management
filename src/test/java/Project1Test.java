@@ -6,17 +6,28 @@ import tasks.TaskE;
 import tasks.TaskG;
 
 public class Project1Test {
-    // Change path as needed!
-    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
+    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/"; // Change path as needed!
+    public final static String output = path + "output/";
 
     @Test
-    public void testTaskA() {
-        TaskA taskA = new TaskA();
+    public void basicTaskA() {
         String[] input = new String[2];
         input[0] = path + "pages.csv";
-        input[1] = path + "output/A";
+        input[1] = output + "A";
         try {
-            taskA.debug(input);
+            TaskA.basic(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void optimizedTaskA() {
+        String[] input = new String[2];
+        input[0] = path + "pages.csv";
+        input[1] = output + "optimized-A";
+        try {
+            TaskA.maponly(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
