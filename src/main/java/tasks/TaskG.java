@@ -3,6 +3,7 @@ package tasks;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -109,7 +110,7 @@ public class TaskG {
                 }
             }
 
-            if (personName != null && latestAccess > cutOffTime) {
+            if (personName != null && latestAccess < cutOffTime) {
                 context.write(key, new Text(personName));
             }
         }
@@ -141,7 +142,7 @@ public class TaskG {
                 return;
             }
 
-            if (latestAccess >= cutOffTime) {
+            if (latestAccess < cutOffTime) {
                 context.write(new Text(fields[2]), new Text("active"));
             }
 
@@ -163,11 +164,11 @@ public class TaskG {
             URI[] cacheFiles = context.getCacheFiles();
 
             if (cacheFiles == null || cacheFiles.length == 0) {
-                throw new FileNotFoundException("Active Users file not found in Distributed Cache");
+                throw new FileNotFoundException("Required files missing in Distributed Cache");
             }
 
+            // Active Users
             Path path = new Path(cacheFiles[0]);
-
             FileSystem fs = FileSystem.get(context.getConfiguration());
             FSDataInputStream fis = fs.open(path);
             BufferedReader reader = new BufferedReader(new InputStreamReader(fis, "UTF-8"));
@@ -182,8 +183,11 @@ public class TaskG {
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String[] fields = value.toString().split(",");
-            if (!activeUsers.contains(fields[0])) {
-                context.write(new Text(fields[0]), new Text(fields[1]));
+            String personID = fields[0].trim();
+            String personName = fields[1].trim();
+
+            if (!activeUsers.contains(personID)) {
+                context.write(new Text(personID), new Text(personName));
             }
         }
     }
@@ -222,7 +226,13 @@ public class TaskG {
         conf.set("currentDate", dateFormat.format(new Date()));
 
         // Temp directory for active users
-        String tempDir = args[2] + "/active";
+        String tempDir = args[2] + "_temp";
+
+        FileSystem fs = FileSystem.get(conf);
+
+        // Cleanup old outputs if they exist
+        fs.delete(new Path(tempDir), true);
+        fs.delete(new Path(args[2]), true);
 
         Job job1 = Job.getInstance(conf, "active user tracker");
         job1.setJarByClass(TaskC.class);
@@ -230,14 +240,17 @@ public class TaskG {
         job1.setReducerClass(ActiveUsersReducer.class);
         job1.setOutputKeyClass(Text.class);
         job1.setOutputValueClass(Text.class);
+
         FileInputFormat.addInputPath(job1, new Path(args[0]));
         FileOutputFormat.setOutputPath(job1, new Path(tempDir));
 
+        System.out.println("Starting Job 1: Active User Tracker...");
         boolean activeUsersCompleted = job1.waitForCompletion(true);
         if (!activeUsersCompleted) {
             System.err.println("Active Users Extraction Failed.");
             System.exit(1);
         }
+        System.out.println("Job 1 Completed Successfully.");
 
         Job job2 = Job.getInstance(conf, "inactivity log");
         job2.setJarByClass(TaskC.class);
@@ -249,35 +262,71 @@ public class TaskG {
         job2.addCacheFile(new URI(tempDir + "/part-r-00000"));
 
         FileInputFormat.addInputPath(job2, new Path(args[1]));
-        FileInputFormat.addInputPath(job2, new Path(args[2]));
+
+        FileOutputFormat.setOutputPath(job2, new Path(args[2]));
+
+        System.out.println("Starting Job 2: Inactivity Mapper...");
+        if (!job2.waitForCompletion(true)) {
+            System.err.println("Job 2 Failed: Inactivity Mapper.");
+            System.exit(1);
+        }
+        System.out.println("Job 2 Completed Successfully.");
     }
 
     // Optimized solution for HDFS
     public static void main(String[] args) throws Exception {
-        String log_csv = args[1] + "/access_logs.csv";
-        String page_csv = args[1] + "/pages.csv";
-
         Configuration conf = new Configuration();
 
         // Set the current date in configuration
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         conf.set("currentDate", dateFormat.format(new Date()));
 
-        System.out.println("Current Date: " + conf.get("currentDate"));
+        // Temp directory for active users
+        String tempDir = args[3] + "_temp";
 
-        Job job = Job.getInstance(conf, "inactivity log");
-        job.setJarByClass(TaskC.class);
+        FileSystem fs = FileSystem.get(conf);
 
-        MultipleInputs.addInputPath(job, new Path(log_csv), TextInputFormat.class, LogMapper.class);
-        MultipleInputs.addInputPath(job, new Path(page_csv), TextInputFormat.class, PageMapper.class);
+        // Cleanup old outputs if they exist
+        fs.delete(new Path(tempDir), true);
+        fs.delete(new Path(args[2]), true);
 
-        job.setReducerClass(InactivtyReducer.class);
+        Job job1 = Job.getInstance(conf, "active user tracker");
+        job1.setJarByClass(TaskC.class);
+        job1.setMapperClass(ActiveUserMapper.class);
+        job1.setReducerClass(ActiveUsersReducer.class);
+        job1.setOutputKeyClass(Text.class);
+        job1.setOutputValueClass(Text.class);
 
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job1, new Path(args[1]));
+        FileOutputFormat.setOutputPath(job1, new Path(tempDir));
 
-        FileOutputFormat.setOutputPath(job, new Path(args[2]));
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+        System.out.println("Starting Job 1: Active User Tracker...");
+        boolean activeUsersCompleted = job1.waitForCompletion(true);
+        if (!activeUsersCompleted) {
+            System.err.println("Active Users Extraction Failed.");
+            System.exit(1);
+        }
+        System.out.println("Job 1 Completed Successfully.");
+
+        Job job2 = Job.getInstance(conf, "inactivity log");
+        job2.setJarByClass(TaskC.class);
+        job2.setMapperClass(InactivityMapper.class);
+        job2.setNumReduceTasks(0); // No reducer needed
+        job2.setOutputKeyClass(Text.class);
+        job2.setOutputValueClass(Text.class);
+
+        job2.addCacheFile(new URI(tempDir + "/part-r-00000"));
+
+        FileInputFormat.addInputPath(job2, new Path(args[2]));
+
+        FileOutputFormat.setOutputPath(job2, new Path(args[3]));
+
+        System.out.println("Starting Job 2: Inactivity Mapper...");
+        if (!job2.waitForCompletion(true)) {
+            System.err.println("Job 2 Failed: Inactivity Mapper.");
+            System.exit(1);
+        }
+        System.out.println("Job 2 Completed Successfully.");
     }
 
 }
