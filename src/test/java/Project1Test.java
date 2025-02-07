@@ -6,7 +6,8 @@ import tasks.TaskE;
 import tasks.TaskG;
 
 public class Project1Test {
-    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/"; // Change path as needed!
+    // Change paths as needed!!
+    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
     public final static String output = path + "output/";
 
     @Test
@@ -90,15 +91,30 @@ public class Project1Test {
     }
 
     @Test
-    public void testTaskG() {
+    public void basicTaskG() {
         TaskG taskG = new TaskG();
         String[] input = new String[3];
         input[0] = path + "access_logs.csv";
         input[1] = path + "pages.csv";
-        input[2] = path + "output/G";
+        input[2] = output + "G";
         try {
             System.out.println("Input Path: " + input[0]);
-            taskG.debug(input);
+            taskG.basic(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void optimizedTaskG() {
+        TaskG taskG = new TaskG();
+        String[] input = new String[3];
+        input[0] = path + "access_logs.csv";
+        input[1] = path + "pages.csv";
+        input[2] = output + "optimized-G";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskG.optimized(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
