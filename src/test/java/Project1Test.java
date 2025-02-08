@@ -11,53 +11,83 @@ public class Project1Test {
     public final static String path = "C:/Study/CS4433/Big_Data_Management/";
 
     @Test
-    public void testTaskA() {
-        TaskA taskA = new TaskA();
-        String[] input = new String[2];
-        input[0] = path + "pages.csv";
-        input[1] = path + "output/A";
-        try {
-            taskA.debug(input);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Test
-    public void testTaskC() {
+    public void basicTaskC() {
         TaskC taskC = new TaskC();
         String[] input = new String[2];
         input[0] = path + "pages.csv";
-        input[1] = path + "output/C";
+        input[1] = output + "C";
         try {
             System.out.println("Input Path: " + input[0]);
-            taskC.debug(input);
+            taskC.basic(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     @Test
-    public void testTaskE() {
+    public void optimizedTaskC() {
+        TaskC taskC = new TaskC();
+        String[] input = new String[2];
+        input[0] = path + "pages.csv";
+        input[1] = output + "optimized-C";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskC.optimized(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void basicTaskE() {
         TaskE taskE = new TaskE();
         String[] input = new String[2];
         input[0] = path + "access_logs.csv";
-        input[1] = path + "output/E";
+        input[1] = output + "E";
         try {
             System.out.println("Input Path: " + input[0]);
-            taskE.debug(input);
+            taskE.basic(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     @Test
-    public void testTaskG() {
+    public void optimizedTaskE() {
+        TaskE taskE = new TaskE();
+        String[] input = new String[2];
+        input[0] = path + "access_logs.csv";
+        input[1] = output + "optimized-E";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskE.optimized(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void basicTaskG() {
         TaskG taskG = new TaskG();
         String[] input = new String[3];
         input[0] = path + "access_logs.csv";
         input[1] = path + "pages.csv";
-        input[2] = path + "output/G";
+        input[2] = output + "G";
+        try {
+            System.out.println("Input Path: " + input[0]);
+            taskG.basic(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void optimizedTaskG() {
+        GOptimized taskG = new GOptimized();
+        String[] input = new String[3];
+        input[0] = path + "access_logs.csv";
+        input[1] = path + "pages.csv";
+        input[2] = output + "optimized-G";
         try {
             System.out.println("Input Path: " + input[0]);
             taskG.debug(input);

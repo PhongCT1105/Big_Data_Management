@@ -101,14 +101,39 @@ public class TaskG {
                 }
             }
 
-            if (personName != null && latestAccess > cutOffTime) {
+            if (personName != null && latestAccess < cutOffTime) {
                 context.write(key, new Text(personName));
             }
         }
     }
 
-    // Debug method
-    public void debug(String[] args) throws Exception {
+    // Reduce-side join with two mappers
+    public void basic(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+
+        // Set the current date in configuration
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        conf.set("currentDate", dateFormat.format(new Date()));
+
+        System.out.println("Current Date: " + conf.get("currentDate"));
+
+        Job job = Job.getInstance(conf, "inactivity log");
+        job.setJarByClass(TaskC.class);
+
+        MultipleInputs.addInputPath(job, new Path(args[0]), TextInputFormat.class, LogMapper.class);
+        MultipleInputs.addInputPath(job, new Path(args[1]), TextInputFormat.class, PageMapper.class);
+
+        job.setReducerClass(InactivtyReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileOutputFormat.setOutputPath(job, new Path(args[2]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
+    // Optimized solution for HDFS
+    public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
 
         // Set the current date in configuration

@@ -15,44 +15,52 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class TaskA {
 
-    // Mapper Class
-    public static class NationalityMapper extends Mapper<Object, Text, Text, Text> {
-        private Text name = new Text();
-        private Text hobby = new Text();
-        private final String targetNationality = "Nauru"; // Change this as needed
+    // Map-Only Class
+    public static class NationalityMapOnly extends Mapper<Object, Text, Text, Text> {
+        private final String targetNationality = "France"; // Change this as needed
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
-            String[] fields = line.split(",");
+            String[] fields = value.toString().split(",");
 
-            // Ignore the header row
-            if (key.toString().equals("0"))
-                return;
-
-            if (fields.length >= 5) { // Ensure at least 5 columns exist
-                String nationality = fields[2].trim(); // Nationality column
-                if (nationality.equals(targetNationality)) { // Filter by nationality
-                    name.set(fields[1]); // Name column
-                    hobby.set(fields[4]); // Hobby column
-                    context.write(name, hobby);
-                }
+            if (fields[2].trim().equalsIgnoreCase(targetNationality.trim())) {
+                context.write(new Text(fields[1].trim()), new Text(fields[4].trim()));
             }
         }
     }
 
-    public void debug(String[] args) throws Exception {
+    // Map-only job
+    public static void optimized(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "nationality filter");
         job.setJarByClass(TaskA.class);
-        job.setMapperClass(NationalityMapper.class);
+        job.setMapperClass(NationalityMapOnly.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
 
-        // **Set number of reducers to 0 to avoid using a reducer**
+        // Set number of reducers to 0 to avoid using a reducer
         job.setNumReduceTasks(0);
 
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
+    // Optimized solution for HDFS
+    public static void main(String[] args) throws Exception {
+        String csv_path = args[1] + "/pages.csv";
+        String output_path = args[2] + "/A";
+
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "nationality filter");
+        job.setJarByClass(TaskA.class);
+        job.setMapperClass(NationalityMapOnly.class);
+        job.setNumReduceTasks(0);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileInputFormat.addInputPath(job, new Path(csv_path));
+        FileOutputFormat.setOutputPath(job, new Path(output_path));
 
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
