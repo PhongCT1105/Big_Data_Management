@@ -111,6 +111,7 @@ public class TaskE {
     // Optimized solution for HDFS
     public static void main(String[] args) throws Exception {
         String csv_path = args[1] + "/access_logs.csv";
+        String output_path = args[2] + "/E";
 
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "access count");
@@ -121,7 +122,7 @@ public class TaskE {
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job, new Path(csv_path));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        FileOutputFormat.setOutputPath(job, new Path(output_path));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }

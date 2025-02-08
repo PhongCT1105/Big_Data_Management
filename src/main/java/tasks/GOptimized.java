@@ -21,6 +21,10 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+// Identify all "disconnected" people (and return their PersonID and Name) that have not
+// accessed the Facebook site for 14 days or longer (i.e., meaning no entries in the
+// AccessLog exist in the last 14 days).
+
 public class GOptimized {
     // Mapper to create a simpler input for a second job
     public static class ActiveUserMapper extends Mapper<Object, Text, Text, Text> {
@@ -48,10 +52,9 @@ public class GOptimized {
                 return;
             }
 
-            if (latestAccess < cutOffTime) {
+            if (latestAccess > cutOffTime) {
                 context.write(new Text(fields[2]), new Text("active"));
             }
-
         }
     }
 
@@ -155,6 +158,10 @@ public class GOptimized {
     }
 
     public static void main(String[] args) throws Exception {
+        String logs_csv = args[1] + "/access_logs.csv";
+        String pages_csv = args[1] + "/pages.csv";
+        String output_path = args[2] + "/G";
+
         Configuration conf = new Configuration();
 
         // Set the current date in configuration
@@ -162,13 +169,13 @@ public class GOptimized {
         conf.set("currentDate", dateFormat.format(new Date()));
 
         // Temp directory for active users
-        String tempDir = args[3] + "_temp";
+        String tempDir = output_path + "_temp";
 
         FileSystem fs = FileSystem.get(conf);
 
         // Cleanup old outputs if they exist
         fs.delete(new Path(tempDir), true);
-        fs.delete(new Path(args[2]), true);
+        fs.delete(new Path(output_path), true);
 
         Job job1 = Job.getInstance(conf, "active user tracker");
         job1.setJarByClass(TaskC.class);
@@ -177,7 +184,7 @@ public class GOptimized {
         job1.setOutputKeyClass(Text.class);
         job1.setOutputValueClass(Text.class);
 
-        FileInputFormat.addInputPath(job1, new Path(args[1]));
+        FileInputFormat.addInputPath(job1, new Path(logs_csv));
         FileOutputFormat.setOutputPath(job1, new Path(tempDir));
 
         System.out.println("Starting Job 1: Active User Tracker...");
@@ -197,9 +204,9 @@ public class GOptimized {
 
         job2.addCacheFile(new URI(tempDir + "/part-r-00000"));
 
-        FileInputFormat.addInputPath(job2, new Path(args[2]));
+        FileInputFormat.addInputPath(job2, new Path(pages_csv));
 
-        FileOutputFormat.setOutputPath(job2, new Path(args[3]));
+        FileOutputFormat.setOutputPath(job2, new Path(output_path));
 
         System.out.println("Starting Job 2: Inactivity Mapper...");
         if (!job2.waitForCompletion(true)) {

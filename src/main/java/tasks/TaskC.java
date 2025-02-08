@@ -78,7 +78,7 @@ public class TaskC {
         Job job = Job.getInstance(conf, "country citizen counter");
         job.setJarByClass(TaskC.class);
         job.setMapperClass(CountryMapper.class);
-        job.setCombinerClass(CountryCombiner.class); // Added combiner
+        job.setCombinerClass(CountryCombiner.class); // Combiner
         job.setReducerClass(CountryReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
@@ -90,15 +90,18 @@ public class TaskC {
     // Optimized solution for HDFS
     public static void main(String[] args) throws Exception {
         String csv_path = args[1] + "/pages.csv";
+        String output_path = args[2] + "/C";
+
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "country citizen counter");
         job.setJarByClass(TaskC.class);
         job.setMapperClass(CountryMapper.class);
+        job.setCombinerClass(CountryCombiner.class); // Combiner
         job.setReducerClass(CountryReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
         FileInputFormat.addInputPath(job, new Path(csv_path));
-        FileOutputFormat.setOutputPath(job, new Path(args[2]));
+        FileOutputFormat.setOutputPath(job, new Path(output_path));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }

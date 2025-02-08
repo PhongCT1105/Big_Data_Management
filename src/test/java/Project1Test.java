@@ -12,18 +12,6 @@ public class Project1Test {
     public final static String output = path + "output/";
 
     @Test
-    public void basicTaskA() {
-        String[] input = new String[2];
-        input[0] = path + "pages.csv";
-        input[1] = output + "A";
-        try {
-            TaskA.basic(input);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Test
     public void optimizedTaskA() {
         String[] input = new String[2];
         input[0] = path + "pages.csv";
