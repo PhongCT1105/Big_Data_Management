@@ -4,6 +4,7 @@ import tasks.TaskA;
 import tasks.TaskC;
 import tasks.TaskE;
 import tasks.TaskG;
+import tasks.GOptimized;
 
 public class Project1Test {
     // Change paths as needed!!
@@ -107,7 +108,7 @@ public class Project1Test {
 
     @Test
     public void optimizedTaskG() {
-        TaskG taskG = new TaskG();
+        GOptimized taskG = new GOptimized();
         String[] input = new String[3];
         input[0] = path + "access_logs.csv";
         input[1] = path + "pages.csv";
