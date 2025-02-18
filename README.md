@@ -16,3 +16,5 @@ To run a single task over Haddop: `hadoop/bin/hadoop jar ~/shared_folder/TaskG.j
 
 - Modify `TaskG.jar` to appropriate file name
 - `/user/cs4433/project1/input`: this must be the location of the data files on HDFS, the file names are hardcoded.
+
+### Contributors
