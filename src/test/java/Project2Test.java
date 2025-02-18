@@ -6,12 +6,12 @@ public class Project2Test {
     public final static String output = path + "output/";
 
     @Test
-    public void optimizedTaskG() {
+    public void kMeans() {
         String[] input = new String[4];
         input[0] = path + "points.csv";
         input[1] = output + "kMeans";
         input[2] = "3";
-        input[3] = "6";
+        input[3] = "1";
         try {
             System.out.println("Input Path: " + input[0]);
             kMeans.main(input);

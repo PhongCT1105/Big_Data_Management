@@ -39,9 +39,10 @@ public class kMeans {
                     centroid[i] = Double.parseDouble(tokens[i]);
                 }
                 centroids.add(centroid);
+                System.out.println(centroid[0] + "," + centroid[1]);
             }
             reader.close();
-            System.out.println("Centroids read in");
+            // System.out.println("Centroids read in");
         }
 
         private int findNearestCentroid(double[] point) {
@@ -93,10 +94,11 @@ public class kMeans {
                 throws IOException, InterruptedException {
             List<double[]> points = new ArrayList<>();
             int dimension = 0;
-            System.out.println("Reducer reached");
+            // System.out.println("Reducer reached");
 
             for (Text val : values) {
-                System.out.println("Reducer received -> Centroid: " + key.get() + " | Point: " + val.toString());
+                // System.out.println("Reducer received -> Centroid: " + key.get() + " | Point:
+                // " + val.toString());
 
                 String[] tokens = val.toString().split(",");
                 double[] point = new double[tokens.length];
