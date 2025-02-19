@@ -12,6 +12,9 @@ public class Project1Test {
     public final static String path = "C:/Study/CS4433/Big_Data_Management/";
     public final static String output = path + "output/";
 
+    //Khoi Path
+    public final static String path = "C:/Study/CS4433/Big_Data_Management/";
+
     @Test
     public void optimizedTaskA() {
         String[] input = new String[2];
