@@ -125,7 +125,6 @@ public class kMeans {
                 sb.append(v).append(",");
             }
             sb.setLength(sb.length() - 1); // Remove trailing comma
-            System.out.println("Updated Centroid " + key.toString() + " -> " + sb.toString());
 
             context.write(new Text(sb.toString()), NullWritable.get());
         }
@@ -134,18 +133,21 @@ public class kMeans {
     public static void main(String[] args) throws Exception {
         Path input = new Path(args[0]); // Path to data points
         Path output = new Path(args[1]); // Output path
-        Path seeds = new Path(args[2]);
-        Integer K = Integer.valueOf(args[3]);
-        Integer R = Integer.valueOf(args[4]);
+        Path seeds = new Path(args[2]); // Random seeds
+        Integer K = Integer.valueOf(args[3]); // Number of clusters
+        Integer R = Integer.valueOf(args[4]); // Number of iterations
+        boolean checkConvergence = Boolean.parseBoolean(args[5]); // True or False
+
+        double tolerance = 25.0;
 
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
         Path centroidPath = new Path("centroids.txt");
-        // System.out.println("Centroid path: " + centroidPath.toString());
 
-        // Step 1: Randomly select initial centroids
-        generateRandomCentroids(K, centroidPath, conf);
-        // Path centroids = new Path("centroids.txt");
+        // Randomly select initial centroids
+        generateRandomCentroids(K, centroidPath, conf); // Replace with line below with new generated k_seeds (x & y
+                                                        // between 0-5000)
+        // selectRandomCentroids(seeds, K, conf);
 
         for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
@@ -161,7 +163,6 @@ public class kMeans {
             job.setOutputValueClass(Text.class);
 
             // Pass centroids via DistributedCache
-            // conf.set("centroids", centroidPath.toString());
             job.addCacheFile(centroidPath.toUri());
 
             FileInputFormat.addInputPath(job, input);
@@ -170,15 +171,65 @@ public class kMeans {
 
             job.waitForCompletion(true);
 
-            // here is where we would check if a tolerance passed/not.
-
             Path newCentroids = new Path(iterOutput + "/part-r-00000");
+
+            if (checkConvergence) {
+                // Compare old centroids with the new centroids
+                List<double[]> oldCentroidsCoord = readCentroids(fs, centroidPath);
+                List<double[]> newCentroidsCoord = readCentroids(fs, newCentroids);
+
+                if (hasConverged(oldCentroidsCoord, newCentroidsCoord, tolerance)) {
+                    System.out.println("Centroids converged in " + (iteration + 1) + " iterations!");
+                    break;
+                }
+            }
 
             centroidPath = newCentroids; // Move to the next iteration
         }
     }
 
+    // **Helper Function: Read centroids from a file**
+    private static List<double[]> readCentroids(FileSystem fs, Path filePath) throws IOException {
+        List<double[]> centroids = new ArrayList<>();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(filePath)));
+        String line;
+
+        while ((line = reader.readLine()) != null) {
+            String[] tokens = line.split(",");
+            double[] centroid = new double[tokens.length];
+            for (int i = 0; i < tokens.length; i++) {
+                centroid[i] = Double.parseDouble(tokens[i]);
+            }
+            centroids.add(centroid);
+        }
+        reader.close();
+        return centroids;
+    }
+
+    // **Helper Function: Check if centroids have converged**
+    private static boolean hasConverged(List<double[]> oldCentroids, List<double[]> newCentroids, double tolerance) {
+        for (int i = 0; i < oldCentroids.size(); i++) {
+            double distance = euclideanDistance(oldCentroids.get(i), newCentroids.get(i));
+            if (distance > tolerance) {
+                return false; // Continue iterating if any centroid moves more than the tolerance
+            }
+        }
+        return true; // Stop early if all centroids moved less than the tolerance
+    }
+
+    // **Helper Function: Compute Euclidean Distance**
+    private static double euclideanDistance(double[] p1, double[] p2) {
+        double sum = 0.0;
+        for (int i = 0; i < p1.length; i++) {
+            sum += Math.pow(p1[i] - p2[i], 2);
+        }
+        return Math.sqrt(sum);
+    }
+
     private static void selectRandomCentroids(Path input, int K, Configuration conf) throws IOException {
+        /**
+         * This mehod will be reimplemented, just need to replace the k_seeds.csv file!
+         */
         FileSystem fs = FileSystem.get(conf);
         BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(input)));
 
@@ -216,6 +267,5 @@ public class kMeans {
         }
 
         writer.close();
-        System.out.println("Generated " + K + " random centroids in " + centroidPath.toString());
     }
 }
