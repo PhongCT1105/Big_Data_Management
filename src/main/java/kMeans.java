@@ -135,18 +135,20 @@ public class kMeans {
     }
 
     public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
         Path input = new Path(args[0]); // Path to data points
         Path output = new Path(args[1]); // Output path
-        Integer K = Integer.valueOf(args[2]);
-        Integer endIteration = Integer.valueOf(args[3]);
+        Path seeds = new Path(args[2]);
+        Integer K = Integer.valueOf(args[3]);
+        Integer R = Integer.valueOf(args[4]);
+
+        Configuration conf = new Configuration();
+        Path centroidPath = new Path("centroids.txt");
 
         // Step 1: Randomly select initial centroids
-        selectRandomCentroids(new Path("k_seeds.csv"), K, conf);
-        Path centroids = new Path("centroids.txt");
+        selectRandomCentroids(seeds, K, conf);
+        // Path centroids = new Path("centroids.txt");
 
-        int iteration = 0;
-        while (iteration < endIteration) {
+        for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
             job.setJarByClass(kMeans.class);
             job.setMapperClass(kMeansMapper.class);
@@ -157,13 +159,18 @@ public class kMeans {
             job.setOutputKeyClass(IntWritable.class);
             job.setOutputValueClass(Text.class);
 
+            // Pass centroids via DistributedCache
+            job.addCacheFile(centroidPath.toUri());
+
             FileInputFormat.addInputPath(job, input);
-            FileOutputFormat.setOutputPath(job, output);
+            FileOutputFormat.setOutputPath(job, new Path(output + "/iter" + iteration));
 
             job.waitForCompletion(true);
 
-            centroids = output;
-            iteration++;
+            centroidPath = new Path(output + "/iter" + iteration + "/part-r-00000");
+
+            // centroids = output;
+            // iteration++;
             System.out.println("Iteration " + iteration + " complete!");
         }
     }
