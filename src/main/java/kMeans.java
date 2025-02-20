@@ -3,6 +3,7 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.URI;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
@@ -11,6 +12,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -25,9 +27,14 @@ public class kMeans {
         private List<double[]> centroids = new ArrayList<>();
 
         protected void setup(Context context) throws IOException {
-            // Load centroids from the distributed cache
-            // BufferedReader reader = new BufferedReader(new FileReader("centroids.txt"));
-            Path centroidsPath = new Path("centroids.txt");
+            URI[] cacheFiles = context.getCacheFiles();
+
+            if (cacheFiles == null || cacheFiles.length == 0) {
+                throw new IOException("No centroids file found in DistributedCache!");
+            }
+
+            Path centroidsPath = new Path(cacheFiles[0]);
+
             FileSystem fs = FileSystem.get(context.getConfiguration());
             BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(centroidsPath)));
 
@@ -39,10 +46,8 @@ public class kMeans {
                     centroid[i] = Double.parseDouble(tokens[i]);
                 }
                 centroids.add(centroid);
-                System.out.println(centroid[0] + "," + centroid[1]);
             }
             reader.close();
-            // System.out.println("Centroids read in");
         }
 
         private int findNearestCentroid(double[] point) {
@@ -79,29 +84,22 @@ public class kMeans {
 
             int centroidIndex = findNearestCentroid(point);
             context.write(new IntWritable(centroidIndex), value);
-
-            // Debugging
-            // System.out.println("Emitting -> Centroid Index: " + centroidIndex + " |
-            // Point: " + value.toString());
         }
     }
 
     // Reducer Class
-    public static class kMeansReducer extends Reducer<IntWritable, Text, IntWritable, Text> {
+    public static class kMeansReducer extends Reducer<IntWritable, Text, Text, NullWritable> {
 
         @Override
         protected void reduce(IntWritable key, Iterable<Text> values, Context context)
                 throws IOException, InterruptedException {
             List<double[]> points = new ArrayList<>();
             int dimension = 0;
-            // System.out.println("Reducer reached");
 
             for (Text val : values) {
-                // System.out.println("Reducer received -> Centroid: " + key.get() + " | Point:
-                // " + val.toString());
-
                 String[] tokens = val.toString().split(",");
                 double[] point = new double[tokens.length];
+
                 // Get list of points
                 for (int i = 0; i < tokens.length; i++) {
                     point[i] = Double.parseDouble(tokens[i]);
@@ -112,14 +110,13 @@ public class kMeans {
 
             double[] newCentroid = new double[dimension];
 
-            // go through and
             for (double[] point : points) {
                 for (int i = 0; i < dimension; i++) {
                     newCentroid[i] += point[i];
                 }
             }
             for (int i = 0; i < dimension; i++) {
-                newCentroid[i] /= points.size();
+                newCentroid[i] = Math.round(newCentroid[i] / points.size()); // Rounds to nearest whole number
             }
 
             // Output the new centroid
@@ -128,9 +125,9 @@ public class kMeans {
                 sb.append(v).append(",");
             }
             sb.setLength(sb.length() - 1); // Remove trailing comma
-            context.write(key, new Text(sb.toString()));
-            // System.out.println("Reducer Output -> Centroid: " + key.get() + " | New
-            // Centroid: " + sb.toString());
+            System.out.println("Updated Centroid " + key.toString() + " -> " + sb.toString());
+
+            context.write(new Text(sb.toString()), NullWritable.get());
         }
     }
 
@@ -142,14 +139,18 @@ public class kMeans {
         Integer R = Integer.valueOf(args[4]);
 
         Configuration conf = new Configuration();
+        FileSystem fs = FileSystem.get(conf);
         Path centroidPath = new Path("centroids.txt");
+        // System.out.println("Centroid path: " + centroidPath.toString());
 
         // Step 1: Randomly select initial centroids
-        selectRandomCentroids(seeds, K, conf);
+        generateRandomCentroids(K, centroidPath, conf);
         // Path centroids = new Path("centroids.txt");
 
         for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
+            System.out.println("Starting iteration " + iteration + " of " + R);
+            System.out.println("Centroid path: " + centroidPath.toString());
             job.setJarByClass(kMeans.class);
             job.setMapperClass(kMeansMapper.class);
             job.setReducerClass(kMeansReducer.class);
@@ -160,18 +161,20 @@ public class kMeans {
             job.setOutputValueClass(Text.class);
 
             // Pass centroids via DistributedCache
+            // conf.set("centroids", centroidPath.toString());
             job.addCacheFile(centroidPath.toUri());
 
             FileInputFormat.addInputPath(job, input);
-            FileOutputFormat.setOutputPath(job, new Path(output + "/iter" + iteration));
+            Path iterOutput = new Path(output + "/iter" + iteration);
+            FileOutputFormat.setOutputPath(job, iterOutput);
 
             job.waitForCompletion(true);
 
-            centroidPath = new Path(output + "/iter" + iteration + "/part-r-00000");
+            // here is where we would check if a tolerance passed/not.
 
-            // centroids = output;
-            // iteration++;
-            System.out.println("Iteration " + iteration + " complete!");
+            Path newCentroids = new Path(iterOutput + "/part-r-00000");
+
+            centroidPath = newCentroids; // Move to the next iteration
         }
     }
 
@@ -198,5 +201,21 @@ public class kMeans {
             writer.write(centroid + "\n");
         }
         writer.close();
+    }
+
+    public static void generateRandomCentroids(int K, Path centroidPath, Configuration conf) throws IOException {
+        FileSystem fs = FileSystem.get(conf);
+        FSDataOutputStream outputStream = fs.create(centroidPath, true);
+        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));
+        Random random = new Random();
+
+        for (int i = 0; i < K; i++) {
+            int x = random.nextInt(5001); // Random integer x in range [0, 5000]
+            int y = random.nextInt(5001); // Random integer y in range [0, 5000]
+            writer.write(x + "," + y + "\n");
+        }
+
+        writer.close();
+        System.out.println("Generated " + K + " random centroids in " + centroidPath.toString());
     }
 }

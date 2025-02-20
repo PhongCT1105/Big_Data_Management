@@ -11,10 +11,9 @@ public class Project2Test {
         input[0] = path + "points.csv";
         input[1] = output;
         input[2] = path + "k_seeds.csv";
-        input[3] = "15";
+        input[3] = "20";
         input[4] = "3";
         try {
-            System.out.println("Input Path: " + input[0]);
             kMeans.main(input);
         } catch (Exception e) {
             e.printStackTrace();
