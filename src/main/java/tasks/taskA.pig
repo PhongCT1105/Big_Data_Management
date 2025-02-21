@@ -7,4 +7,3 @@ result = FOREACH filtered_users GENERATE name, hobby;
 
 -- Store the output
 STORE result INTO 'output/TaskA' USING PigStorage(',');
-
