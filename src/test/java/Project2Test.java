@@ -1,9 +1,18 @@
 import org.junit.Test;
 
 public class Project2Test {
-    // Change paths as needed
+    // Change path as needed!
+    // Sandi Path
     public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
-    public final static String output = path + "output";
+
+    // Phong Path
+    // public final static String path = "C:/Study/CS4433/Big_Data_Management/";
+
+    // Khoi Path
+    // public final static String path = "C:/Study/CS4433/Big_Data_Management/";
+
+    // Output Path
+    public final static String output = path + "output/";
 
     @Test
     public void Requals1() {
