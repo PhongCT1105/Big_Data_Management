@@ -233,10 +233,10 @@ public class kMeans {
             System.exit(1);
         }
         Path input = new Path(args[0]);         // Data points input file
-        Path output = new Path(args[1]);          // Base output directory
-        Path seeds = new Path(args[2]);           // Seeds file (if used)
-        int K = Integer.parseInt(args[3]);        // Number of clusters
-        int R = Integer.parseInt(args[4]);        // Maximum number of iterations
+        Path output = new Path(args[1]);        // Base output directory
+        Path seeds = new Path(args[2]);         // Seeds file (if used)
+        int K = Integer.parseInt(args[3]);      // Number of clusters
+        int R = Integer.parseInt(args[4]);      // Maximum number of iterations
         boolean checkConvergence = Boolean.parseBoolean(args[5]); // Whether to check for convergence
 
         double tolerance = 50.0;
@@ -246,37 +246,48 @@ public class kMeans {
 
         // Generate initial centroids (randomly in this example)
         generateRandomCentroids(K, centroidPath, conf);
-        // Alternatively, use: selectRandomCentroids(seeds, K, conf);
 
-        // Loop through iterations
         // Loop through iterations
         for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
             job.setJarByClass(kMeans.class);
+
             System.out.println("Starting iteration " + iteration + " of " + R);
             System.out.println("Using centroid path: " + centroidPath.toString());
 
             job.setMapperClass(kMeansMapper.class);
-            job.setCombinerClass(kMeansCombiner.class);
 
-            // Use FinalReducer in the final iteration to produce dual outputs.
+            // ---------------------
+            // 1) For non-final iterations, use combiner + kMeansReducer
+            // 2) For final iteration, remove combiner and use FinalReducer
             if (iteration == R - 1) {
+                // Final iteration
                 job.setReducerClass(FinalReducer.class);
+
+                // DO NOT set the combiner here:
+                // job.setCombinerClass(kMeansCombiner.class);  // <--- omit this line!
+
+                // Named outputs for final iteration
                 MultipleOutputs.addNamedOutput(job, "centers", TextOutputFormat.class, Text.class, NullWritable.class);
                 MultipleOutputs.addNamedOutput(job, "clustered", TextOutputFormat.class, Text.class, NullWritable.class);
-                // Optionally, set the convergence flag based on your convergence check.
-                boolean convergedFlag = hasConverged(fs, new Path(centroidPath.toString()), tolerance);
+
+                // Optionally, check convergence to set a flag
+                boolean convergedFlag = hasConverged(fs, centroidPath, tolerance);
                 job.getConfiguration().setBoolean("convergence", convergedFlag);
+
             } else {
+                // Intermediate iteration
+                job.setCombinerClass(kMeansCombiner.class);
                 job.setReducerClass(kMeansReducer.class);
             }
+            // ---------------------
 
             job.setMapOutputKeyClass(Text.class);
             job.setMapOutputValueClass(Text.class);
             job.setOutputKeyClass(Text.class);
             job.setOutputValueClass(NullWritable.class);
 
-            // Distribute current centroids file to mappers via DistributedCache.
+            // Distribute current centroids file to mappers via DistributedCache
             job.addCacheFile(centroidPath.toUri());
             FileInputFormat.addInputPath(job, input);
             Path iterOutput = new Path(output + "/iter" + iteration);
@@ -284,40 +295,46 @@ public class kMeans {
 
             job.waitForCompletion(true);
 
-            // For non-final iterations, update centroids file and check for convergence.
+            // For non-final iterations, update centroids and check for convergence
             if (iteration != R - 1) {
                 Path newCentroids = new Path(iterOutput + "/part-r-00000");
                 if (checkConvergence && hasConverged(fs, newCentroids, tolerance)) {
                     System.out.println("Centroids converged at iteration " + (iteration + 1));
-                    // --- Place the snippet here ---
-                    // Run a final iteration with FinalReducer to generate the dual outputs.
-                    iteration++;  // Use next iteration number for final job.
+
+                    // Run one final iteration (with FinalReducer, no combiner) for final output
+                    iteration++;  // use next iteration number for final job
                     Job finalJob = Job.getInstance(conf, "K-Means Final Iteration " + iteration);
                     finalJob.setJarByClass(kMeans.class);
+
                     finalJob.setMapperClass(kMeansMapper.class);
+                    // No combiner in final iteration
+                    // finalJob.setCombinerClass(kMeansCombiner.class); // omit this line
                     finalJob.setReducerClass(FinalReducer.class);
+
                     MultipleOutputs.addNamedOutput(finalJob, "centers", TextOutputFormat.class, Text.class, NullWritable.class);
                     MultipleOutputs.addNamedOutput(finalJob, "clustered", TextOutputFormat.class, Text.class, NullWritable.class);
+
                     finalJob.setMapOutputKeyClass(Text.class);
                     finalJob.setMapOutputValueClass(Text.class);
                     finalJob.setOutputKeyClass(Text.class);
                     finalJob.setOutputValueClass(NullWritable.class);
-                    // Pass the most recent centroids file to the mappers
+
                     finalJob.addCacheFile(newCentroids.toUri());
                     FileInputFormat.addInputPath(finalJob, input);
                     Path finalOutput = new Path(output + "/iter" + iteration);
                     FileOutputFormat.setOutputPath(finalJob, finalOutput);
+
                     finalJob.getConfiguration().setBoolean("convergence", true);
+
                     finalJob.waitForCompletion(true);
-                    // Update the centroidPath if needed, then exit the loop.
                     centroidPath = new Path(finalOutput + "/part-r-00000");
                     break;
                 }
                 centroidPath = newCentroids;
             }
         }
-
     }
+
 
     // --- Helper Method: Check Convergence ---
     // Reads a centroids file (with lines in the format "newCentroid Old:oldCentroid")
