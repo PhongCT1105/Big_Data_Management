@@ -20,5 +20,5 @@ result = FOREACH grouped_data {
     GENERATE group AS person_id, total_accesses, distinct_page_count;
 };
 
--- Store the result
+-- Store the result in the output directory
 STORE result INTO 'output/taskE' USING PigStorage(',');

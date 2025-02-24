@@ -5,15 +5,14 @@ import tasks.*;
 public class Project1Test {
     // Change path as needed!
     // Sandi Path
-    // public final static String path =
-    // "/Users/antoski/WPI/CS4433/Big_Data_Management/";
+    public final static String path = "/Users/antoski/WPI/CS4433/Big_Data_Management/";
 
     // Phong Path
-    public final static String path = "C:/Study/CS4433/Big_Data_Management/";
+    // public final static String path = "C:/Study/CS4433/Big_Data_Management/";
     public final static String output = path + "output/";
 
-    //Khoi Path
-    public final static String path = "C:/Study/CS4433/Big_Data_Management/";
+    // Khoi Path
+    // public final static String path = "C:/Study/CS4433/Big_Data_Management/";
 
     @Test
     public void optimizedTaskA() {
@@ -119,7 +118,7 @@ public class Project1Test {
         String[] input = new String[3];
         input[0] = path + "access_logs.csv";
         input[1] = path + "pages.csv";
-        input[2] = path + "output/B";
+        input[2] = output + "B";
         try {
             System.out.println("Input Path: " + input[0]);
             taskB.debug(input);
@@ -133,7 +132,7 @@ public class Project1Test {
         TaskD taskD = new TaskD();
         String[] input = new String[3];
         input[0] = path + "friends.csv"; // Friendship file
-        input[1] = path + "output/D"; // Output directory
+        input[1] = output + "D"; // Output directory
         input[2] = path + "pages.csv"; // Page owners file
         try {
             System.out.println("Input Path: " + input[0]);
@@ -149,7 +148,8 @@ public class Project1Test {
         String[] input = new String[4];
         input[0] = path + "friends.csv"; // Friendship file
         input[1] = path + "access_logs.csv"; // Access logs file
-        input[2] = path + "output/F"; // Output directory
+        input[2] = output + "F";
+        ; // Output directory
         input[3] = path + "pages.csv"; // Person details file
         try {
             System.out.println("Input Path: " + input[0]);
@@ -165,8 +165,8 @@ public class Project1Test {
         String[] input = new String[4];
         input[0] = path + "friends.csv"; // Friend relationships file
         input[1] = path + "pages.csv"; // People details file
-        input[2] = path + "output/intermediate"; // Intermediate output directory for Job 1
-        input[3] = path + "output/popular"; // Final output directory for Job 2
+        input[2] = output + "intermediate"; // Intermediate output directory for Job 1
+        input[3] = output + "popular"; // Final output directory for Job 2
         try {
             System.out.println("Testing TaskH with input: " + input[0]);
             taskH.debug(input);
