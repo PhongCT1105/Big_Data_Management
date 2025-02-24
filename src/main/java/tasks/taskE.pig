@@ -20,4 +20,4 @@ result = FOREACH grouped_data {
 };
 
 -- Store the result in the output directory
-STORE result INTO 'output/taskD' USING PigStorage(',');
+STORE result INTO 'output/taskE' USING PigStorage(',');
