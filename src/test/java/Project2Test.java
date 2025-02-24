@@ -1,3 +1,9 @@
+import static org.junit.Assert.assertTrue;
+import java.io.IOException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.junit.Test;
 
 public class Project2Test {
@@ -15,16 +21,14 @@ public class Project2Test {
     public final static String output = path + "output/";
 
     @Test
-    public void testRequals1() {
-        String[] input = new String[7];
+    public void Requals1() {
+        String[] input = new String[6];
         input[0] = path + "points.csv";
         input[1] = output + "/Requals1";
         input[2] = path + "k_seeds.csv";
-        input[3] = "10";  // Number of clusters (K)
-        input[4] = "1";   // Number of iterations (R)
-        input[5] = "False"; // No convergence check
-        input[6] = "False"; // Output only cluster centers
-
+        input[3] = "10";        // K value
+        input[4] = "1";         // R = 1 (single iteration)
+        input[5] = "False";     // No convergence check
         try {
             kMeans.main(input);
         } catch (Exception e) {
@@ -33,16 +37,14 @@ public class Project2Test {
     }
 
     @Test
-    public void testRequals6() {
-        String[] input = new String[7];
+    public void Requals6() {
+        String[] input = new String[6];
         input[0] = path + "points.csv";
         input[1] = output + "/Requals6";
         input[2] = path + "k_seeds.csv";
-        input[3] = "10";
-        input[4] = "6";
-        input[5] = "False";
-        input[6] = "False";
-
+        input[3] = "10";        // K value
+        input[4] = "6";         // R = 6 iterations
+        input[5] = "False";     // No convergence check
         try {
             kMeans.main(input);
         } catch (Exception e) {
@@ -51,56 +53,61 @@ public class Project2Test {
     }
 
     @Test
-    public void testTolerance() {
-        String[] input = new String[7];
+    public void tolerance() {
+        String[] input = new String[6];
         input[0] = path + "points.csv";
         input[1] = output + "/tolerance";
         input[2] = path + "k_seeds.csv";
-        input[3] = "10";
-        input[4] = "20";
-        input[5] = "True"; // Enable convergence check
-        input[6] = "False";
-
+        input[3] = "10";        // K value
+        input[4] = "20";        // Maximum iterations R = 20
+        input[5] = "True";      // Enable convergence checking (FinalReducer should be run)
         try {
             kMeans.main(input);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
-    // **New Test Cases for Task (e)**
+            // Instead of assuming "iter19", we choose the iteration directory with the highest iteration number.
+            Configuration conf = new Configuration();
+            FileSystem fs = FileSystem.get(conf);
+            Path baseOutputPath = new Path(output + "/tolerance");
 
-    @Test
-    public void testOutputClusterCentersOnly() {
-        String[] input = new String[7];
-        input[0] = path + "points.csv";
-        input[1] = output + "/outputCentroids";
-        input[2] = path + "k_seeds.csv";
-        input[3] = "10";
-        input[4] = "10";
-        input[5] = "True"; // Enable convergence check
-        input[6] = "False"; // Output only cluster centers
+            FileStatus[] statuses = fs.listStatus(baseOutputPath);
+            int maxIter = -1;
+            Path finalIterationPath = null;
+            for (FileStatus status : statuses) {
+                if (status.isDirectory()) {
+                    String folderName = status.getPath().getName();
+                    if (folderName.startsWith("iter")) {
+                        try {
+                            int iterNum = Integer.parseInt(folderName.substring(4));
+                            if (iterNum > maxIter) {
+                                maxIter = iterNum;
+                                finalIterationPath = status.getPath();
+                            }
+                        } catch (NumberFormatException e) {
+                            // Ignore non-matching folder names.
+                        }
+                    }
+                }
+            }
 
-        try {
-            kMeans.main(input);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+            assertTrue("No iteration directory found under: " + baseOutputPath, finalIterationPath != null);
 
-    @Test
-    public void testOutputClusteredDataPoints() {
-        String[] input = new String[7];
-        input[0] = path + "points.csv";
-        input[1] = output + "/outputClusteredData";
-        input[2] = path + "k_seeds.csv";
-        input[3] = "10";
-        input[4] = "10";
-        input[5] = "True"; // Enable convergence check
-        input[6] = "True"; // Output clustered data points
+            // Now check that the final iteration directory contains the multiple outputs:
+            // one file name starting with "centers" and one starting with "clustered".
+            FileStatus[] finalFiles = fs.listStatus(finalIterationPath);
+            boolean foundCenters = false;
+            boolean foundClustered = false;
+            for (FileStatus fileStatus : finalFiles) {
+                String name = fileStatus.getPath().getName();
+                if (name.startsWith("centers")) {
+                    foundCenters = true;
+                }
+                if (name.startsWith("clustered")) {
+                    foundClustered = true;
+                }
+            }
+            assertTrue("Final output should contain centers output.", foundCenters);
+            assertTrue("Final output should contain clustered output.", foundClustered);
 
-        try {
-            kMeans.main(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
