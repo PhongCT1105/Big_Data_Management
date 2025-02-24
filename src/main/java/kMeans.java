@@ -4,7 +4,10 @@ import java.io.BufferedWriter;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URI;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -18,39 +21,38 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
 public class kMeans {
 
-    // Mapper Class
+    // --- Mapper Class ---
     public static class kMeansMapper extends Mapper<LongWritable, Text, Text, Text> {
         private List<double[]> centroids = new ArrayList<>();
 
-        protected void setup(Context context) throws IOException {
+        @Override
+        protected void setup(Context context) throws IOException, InterruptedException {
+            // Get centroids from the DistributedCache (first file in cache)
             URI[] cacheFiles = context.getCacheFiles();
-
             if (cacheFiles == null || cacheFiles.length == 0) {
                 throw new IOException("No centroids file found in DistributedCache!");
             }
-
             Path centroidsPath = new Path(cacheFiles[0]);
-
             FileSystem fs = FileSystem.get(context.getConfiguration());
             BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(centroidsPath)));
-
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] tokens = line.split(",");
-
-                // If length > 2, we are past the 1st iteration
+                // If the line contains more than two tokens, assume it is of the format:
+                // newCentroid Old:oldCentroid, so remove the "Old:" portion.
                 if (tokens.length > 2) {
                     String[] trimTokens = line.split("Old:");
-                    String newCentroid = trimTokens[0].trim();
-                    tokens = newCentroid.split(",");
+                    String newCentroidStr = trimTokens[0].trim();
+                    tokens = newCentroidStr.split(",");
                 }
-
                 double[] centroid = new double[tokens.length];
                 for (int i = 0; i < tokens.length; i++) {
-                    centroid[i] = Double.parseDouble(tokens[i]);
+                    centroid[i] = Double.parseDouble(tokens[i].trim());
                 }
                 centroids.add(centroid);
             }
@@ -78,250 +80,306 @@ public class kMeans {
             return Math.sqrt(sum);
         }
 
-        protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+        @Override
+        protected void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            // Optionally skip header line (if key equals 0)
+            if (key.get() == 0) {
+                return;
+            }
             String[] tokens = value.toString().split(",");
             double[] point = new double[tokens.length];
-
-            if (key.toString().equals("0"))
-                return;
-
             for (int i = 0; i < tokens.length; i++) {
-                point[i] = Double.parseDouble(tokens[i]);
+                point[i] = Double.parseDouble(tokens[i].trim());
             }
-
             int centroidIndex = findNearestCentroid(point);
-
             double[] centroid = centroids.get(centroidIndex);
-            String centroidString = String.valueOf(centroid[0]) + "," + String.valueOf(centroid[1]);
 
-            context.write(new Text(centroidString), value);
+            // Build a centroid key string (e.g., "2500.0,3000.0")
+            StringBuilder centroidKey = new StringBuilder();
+            for (int i = 0; i < centroid.length; i++) {
+                centroidKey.append(centroid[i]);
+                if (i != centroid.length - 1) {
+                    centroidKey.append(",");
+                }
+            }
+            // Emit key = centroid; value = original point (as text)
+            context.write(new Text(centroidKey.toString()), value);
         }
     }
 
-    // Reducer Class
+    // --- Reducer Class for Intermediate Iterations ---
     public static class kMeansReducer extends Reducer<Text, Text, Text, NullWritable> {
+        @Override
+        protected void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            long totalXSum = 0;
+            long totalYSum = 0;
+            long totalCount = 0;
+            for (Text val : values) {
+                String[] tokens = val.toString().split(",");
+                if (tokens.length == 3) {
+                    int partialX = Integer.parseInt(tokens[0].trim());
+                    int partialY = Integer.parseInt(tokens[1].trim());
+                    int partialCount = Integer.parseInt(tokens[2].trim());
+                    totalXSum += partialX;
+                    totalYSum += partialY;
+                    totalCount += partialCount;
+                } else if (tokens.length == 2) {
+                    int x = Integer.parseInt(tokens[0].trim());
+                    int y = Integer.parseInt(tokens[1].trim());
+                    totalXSum += x;
+                    totalYSum += y;
+                    totalCount++;
+                }
+            }
+            int newX = Math.round((float) totalXSum / totalCount);
+            int newY = Math.round((float) totalYSum / totalCount);
+            String newCentroid = newX + "," + newY;
+            context.write(new Text(newCentroid + " Old:" + key.toString()), NullWritable.get());
+        }
+    }
 
-        private boolean outputClusters; // Determines if we output data points or only centroids
-        private boolean hasConverged = true;
-        private double tolerance;
+
+    // --- Combiner Class for Optimization ---
+    public static class kMeansCombiner extends Reducer<Text, Text, Text, Text> {
+        @Override
+        protected void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            int xSum = 0;
+            int ySum = 0;
+            int count = 0;
+            for (Text val : values) {
+                String[] tokens = val.toString().split(",");
+                int x = Integer.parseInt(tokens[0].trim());
+                int y = Integer.parseInt(tokens[1].trim());
+                xSum += x;
+                ySum += y;
+                count++;
+            }
+            // Emit combined sums and count as a single string "xSum,ySum,count"
+            context.write(key, new Text(xSum + "," + ySum + "," + count));
+        }
+    }
+
+    // --- Final Reducer Class using MultipleOutputs ---
+    // This reducer writes two output types:
+    // (a) Only cluster centers along with convergence flag.
+    // (b) Each data point with its final cluster center assignment.
+    public static class FinalReducer extends Reducer<Text, Text, Text, NullWritable> {
+        private MultipleOutputs<Text, NullWritable> mos;
+        private boolean converged;
 
         @Override
-        protected void setup(Context context) {
-            Configuration conf = context.getConfiguration();
-            outputClusters = conf.getBoolean("outputClusters", false); // Default is false (only centroids)
-            tolerance = conf.getDouble("tolerance", 50.0); // Default tolerance
+        protected void setup(Context context) throws IOException, InterruptedException {
+            mos = new MultipleOutputs<>(context);
+            converged = context.getConfiguration().getBoolean("convergence", false);
         }
 
         @Override
         protected void reduce(Text key, Iterable<Text> values, Context context)
                 throws IOException, InterruptedException {
+            long totalXSum = 0;
+            long totalYSum = 0;
+            long totalCount = 0;
+            List<String> points = new ArrayList<>();
 
-            int xSum = 0;
-            int ySum = 0;
-            int numPoints = 0;
-            List<String> clusteredPoints = new ArrayList<>();
-
-            for (Text val : values) {
-                String[] tokens = val.toString().split(",");
-                int x = Integer.parseInt(tokens[0]);
-                int y = Integer.parseInt(tokens[1]);
-                xSum += x;
-                ySum += y;
-                numPoints++;
-
-                if (outputClusters) {
-                    clusteredPoints.add(val.toString()); // Store points for later output
+            for (Text value : values) {
+                String[] tokens = value.toString().split(",");
+                // If the record is aggregated (from combiner), it should have three tokens.
+                if (tokens.length == 3) {
+                    int partialX = Integer.parseInt(tokens[0].trim());
+                    int partialY = Integer.parseInt(tokens[1].trim());
+                    int partialCount = Integer.parseInt(tokens[2].trim());
+                    totalXSum += partialX;
+                    totalYSum += partialY;
+                    totalCount += partialCount;
+                } else if (tokens.length == 2) {  // Otherwise, treat it as a single point.
+                    int x = Integer.parseInt(tokens[0].trim());
+                    int y = Integer.parseInt(tokens[1].trim());
+                    totalXSum += x;
+                    totalYSum += y;
+                    totalCount++;
                 }
+                points.add(value.toString());
             }
 
-            double newX = (double) xSum / numPoints;
-            double newY = (double) ySum / numPoints;
+            int newX = Math.round((float) totalXSum / totalCount);
+            int newY = Math.round((float) totalYSum / totalCount);
             String newCentroid = newX + "," + newY;
 
-            // Extract old centroid
-            String[] oldTokens = key.toString().split(",");
-            double oldX = Double.parseDouble(oldTokens[0]);
-            double oldY = Double.parseDouble(oldTokens[1]);
+            // Variation (a): Write final cluster center with convergence flag.
+            String centersOutput = newCentroid + " Converged:" + (converged ? "yes" : "no");
+            mos.write("centers", new Text(centersOutput), NullWritable.get());
 
-            // Compute Euclidean distance for convergence check
-            double distance = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2));
-            if (distance > tolerance) {
-                hasConverged = false; // If any centroid moves more than the threshold, we haven't converged
-            }
-
-            if (!outputClusters) {
-                // (e.a) Output only cluster centers and convergence status
-                String output = newCentroid + " Converged: " + (hasConverged ? "Yes" : "No");
-                context.write(new Text(output), NullWritable.get());
-            } else {
-                // (e.b) Output data points and assigned cluster centers
-                for (String point : clusteredPoints) {
-                    context.write(new Text(point + " -> " + newCentroid), NullWritable.get());
-                }
+            // Variation (b): Write each data point (or aggregated record) with its assigned final cluster center.
+            for (String point : points) {
+                String clusteredOutput = point + " assignedTo " + newCentroid;
+                mos.write("clustered", new Text(clusteredOutput), NullWritable.get());
             }
         }
-    }
-
-
-    // Combiner Class
-    public static class kMeansCombiner extends Reducer<Text, Text, Text, Text> {
 
         @Override
-        protected void reduce(Text key, Iterable<Text> values, Context context)
-                throws IOException, InterruptedException {
-
-            int xSum = 0;
-            int ySum = 0;
-            int numPoints = 0;
-
-            for (Text val : values) {
-
-                String[] tokens = val.toString().split(",");
-                int x = Integer.parseInt(tokens[0]);
-                int y = Integer.parseInt(tokens[1]);
-
-                xSum += x;
-                ySum += y;
-                numPoints++;
-            }
-
-            context.write(key, new Text(xSum + "," + ySum + "," + numPoints));
+        protected void cleanup(Context context) throws IOException, InterruptedException {
+            mos.close();
         }
     }
 
+
+    // --- Main Driver ---
     public static void main(String[] args) throws Exception {
-        Path input = new Path(args[0]); // Path to data points
-        Path output = new Path(args[1]); // Output path
-        Path seeds = new Path(args[2]); // Random seeds
-        Integer K = Integer.valueOf(args[3]); // Number of clusters
-        Integer R = Integer.valueOf(args[4]); // Number of iterations
-        boolean checkConvergence = Boolean.parseBoolean(args[5]); // True or False
+        if (args.length < 6) {
+            System.err.println("Usage: kMeans <input> <output> <seeds> <K> <R> <checkConvergence>");
+            System.exit(1);
+        }
+        Path input = new Path(args[0]);         // Data points input file
+        Path output = new Path(args[1]);          // Base output directory
+        Path seeds = new Path(args[2]);           // Seeds file (if used)
+        int K = Integer.parseInt(args[3]);        // Number of clusters
+        int R = Integer.parseInt(args[4]);        // Maximum number of iterations
+        boolean checkConvergence = Boolean.parseBoolean(args[5]); // Whether to check for convergence
 
         double tolerance = 50.0;
-
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
         Path centroidPath = new Path("centroids.txt");
 
-        // Randomly select initial centroids
-        generateRandomCentroids(K, centroidPath, conf); // Replace with line below with new generated k_seeds (x & y
-                                                        // between 0-5000)
-        // selectRandomCentroids(seeds, K, conf);
+        // Generate initial centroids (randomly in this example)
+        generateRandomCentroids(K, centroidPath, conf);
+        // Alternatively, use: selectRandomCentroids(seeds, K, conf);
 
+        // Loop through iterations
+        // Loop through iterations
         for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
             job.setJarByClass(kMeans.class);
+            System.out.println("Starting iteration " + iteration + " of " + R);
+            System.out.println("Using centroid path: " + centroidPath.toString());
+
             job.setMapperClass(kMeansMapper.class);
             job.setCombinerClass(kMeansCombiner.class);
-            job.setReducerClass(kMeansReducer.class);
+
+            // Use FinalReducer in the final iteration to produce dual outputs.
+            if (iteration == R - 1) {
+                job.setReducerClass(FinalReducer.class);
+                MultipleOutputs.addNamedOutput(job, "centers", TextOutputFormat.class, Text.class, NullWritable.class);
+                MultipleOutputs.addNamedOutput(job, "clustered", TextOutputFormat.class, Text.class, NullWritable.class);
+                // Optionally, set the convergence flag based on your convergence check.
+                boolean convergedFlag = hasConverged(fs, new Path(centroidPath.toString()), tolerance);
+                job.getConfiguration().setBoolean("convergence", convergedFlag);
+            } else {
+                job.setReducerClass(kMeansReducer.class);
+            }
 
             job.setMapOutputKeyClass(Text.class);
             job.setMapOutputValueClass(Text.class);
             job.setOutputKeyClass(Text.class);
             job.setOutputValueClass(NullWritable.class);
 
-            // Pass centroids via DistributedCache
+            // Distribute current centroids file to mappers via DistributedCache.
             job.addCacheFile(centroidPath.toUri());
-
             FileInputFormat.addInputPath(job, input);
             Path iterOutput = new Path(output + "/iter" + iteration);
             FileOutputFormat.setOutputPath(job, iterOutput);
 
-            // Set output type based on whether it's the last iteration
-            boolean isFinalIteration = (iteration == R - 1);
-            boolean outputClusters = Boolean.parseBoolean(args[6]); // Get parameter from command line
-
-            conf.setBoolean("outputClusters", isFinalIteration && outputClusters);
-
             job.waitForCompletion(true);
 
-            Path newCentroids = new Path(iterOutput + "/part-r-00000");
-
-            if (checkConvergence && R > 1 && hasConverged(fs, newCentroids, tolerance)) {
-                System.out.println("Centroids converged in " + (iteration + 1) + " iterations!");
-                break;
+            // For non-final iterations, update centroids file and check for convergence.
+            if (iteration != R - 1) {
+                Path newCentroids = new Path(iterOutput + "/part-r-00000");
+                if (checkConvergence && hasConverged(fs, newCentroids, tolerance)) {
+                    System.out.println("Centroids converged at iteration " + (iteration + 1));
+                    // --- Place the snippet here ---
+                    // Run a final iteration with FinalReducer to generate the dual outputs.
+                    iteration++;  // Use next iteration number for final job.
+                    Job finalJob = Job.getInstance(conf, "K-Means Final Iteration " + iteration);
+                    finalJob.setJarByClass(kMeans.class);
+                    finalJob.setMapperClass(kMeansMapper.class);
+                    finalJob.setReducerClass(FinalReducer.class);
+                    MultipleOutputs.addNamedOutput(finalJob, "centers", TextOutputFormat.class, Text.class, NullWritable.class);
+                    MultipleOutputs.addNamedOutput(finalJob, "clustered", TextOutputFormat.class, Text.class, NullWritable.class);
+                    finalJob.setMapOutputKeyClass(Text.class);
+                    finalJob.setMapOutputValueClass(Text.class);
+                    finalJob.setOutputKeyClass(Text.class);
+                    finalJob.setOutputValueClass(NullWritable.class);
+                    // Pass the most recent centroids file to the mappers
+                    finalJob.addCacheFile(newCentroids.toUri());
+                    FileInputFormat.addInputPath(finalJob, input);
+                    Path finalOutput = new Path(output + "/iter" + iteration);
+                    FileOutputFormat.setOutputPath(finalJob, finalOutput);
+                    finalJob.getConfiguration().setBoolean("convergence", true);
+                    finalJob.waitForCompletion(true);
+                    // Update the centroidPath if needed, then exit the loop.
+                    centroidPath = new Path(finalOutput + "/part-r-00000");
+                    break;
+                }
+                centroidPath = newCentroids;
             }
-
-            centroidPath = newCentroids;
         }
 
     }
 
-    // **Helper Function: Check if centroids have converged**
-
-
+    // --- Helper Method: Check Convergence ---
+    // Reads a centroids file (with lines in the format "newCentroid Old:oldCentroid")
+    // and determines if the Euclidean distance between old and new centroids is within tolerance.
     private static boolean hasConverged(FileSystem fs, Path centroidPath, double tolerance) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(centroidPath)));
-
         String line;
-        boolean hasConverged = true; // Assume convergence unless proven otherwise
-
+        boolean converged = true;
         while ((line = reader.readLine()) != null) {
-            // Extract "newX,newY" before "Old:"
             String[] parts = line.split(" Old:");
+            if (parts.length < 2) continue; // Skip improperly formatted lines
             String[] newTokens = parts[0].split(",");
-            double newX = Double.parseDouble(newTokens[0]);
-            double newY = Double.parseDouble(newTokens[1]);
-
-            // Extract "oldX,oldY" after "Old:"
+            double newX = Double.parseDouble(newTokens[0].trim());
+            double newY = Double.parseDouble(newTokens[1].trim());
             String[] oldTokens = parts[1].split(",");
-            double oldX = Double.parseDouble(oldTokens[0]);
-            double oldY = Double.parseDouble(oldTokens[1]);
-
-            // Compute Euclidean distance
+            double oldX = Double.parseDouble(oldTokens[0].trim());
+            double oldY = Double.parseDouble(oldTokens[1].trim());
             double distance = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2));
-
-            // If any centroid moved more than the tolerance, stop checking
             if (distance > tolerance) {
-                hasConverged = false;
+                converged = false;
                 break;
             }
         }
-
         reader.close();
-        return hasConverged;
+        return converged;
     }
 
+    // --- Helper Method: Select Random Centroids from an Input File ---
+    // (This method can be used if you prefer to choose initial centroids from your data.)
     private static void selectRandomCentroids(Path input, int K, Configuration conf) throws IOException {
-        /**
-         * This mehod will be reimplemented, just need to replace the k_seeds.csv file!
-         */
         FileSystem fs = FileSystem.get(conf);
         BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(input)));
-
         List<String> dataPoints = new ArrayList<>();
         String line;
         while ((line = reader.readLine()) != null) {
             dataPoints.add(line);
         }
         reader.close();
-
-        // Shuffle and pick K random points
         Collections.shuffle(dataPoints);
         List<String> initialCentroids = dataPoints.subList(0, K);
-
-        // Write to centroids.txt
         Path centroidPath = new Path("centroids.txt");
         FSDataOutputStream outputStream = fs.create(centroidPath, true);
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));
         for (String centroid : initialCentroids) {
-            writer.write(centroid + "\n");
+            writer.write(centroid);
+            writer.newLine();
         }
         writer.close();
     }
 
+    // --- Helper Method: Generate Random Centroids ---
     public static void generateRandomCentroids(int K, Path centroidPath, Configuration conf) throws IOException {
         FileSystem fs = FileSystem.get(conf);
         FSDataOutputStream outputStream = fs.create(centroidPath, true);
         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream));
         Random random = new Random();
-
         for (int i = 0; i < K; i++) {
-            int x = random.nextInt(5001); // Random integer x in range [0, 5000]
-            int y = random.nextInt(5001); // Random integer y in range [0, 5000]
-            writer.write(x + "," + y + "\n");
+            int x = random.nextInt(5001); // random x between 0 and 5000
+            int y = random.nextInt(5001); // random y between 0 and 5000
+            writer.write(x + "," + y);
+            writer.newLine();
         }
-
         writer.close();
     }
 }
