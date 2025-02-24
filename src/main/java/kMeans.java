@@ -101,6 +101,17 @@ public class kMeans {
     // Reducer Class
     public static class kMeansReducer extends Reducer<Text, Text, Text, NullWritable> {
 
+        private boolean outputClusters; // Determines if we output data points or only centroids
+        private boolean hasConverged = true;
+        private double tolerance;
+
+        @Override
+        protected void setup(Context context) {
+            Configuration conf = context.getConfiguration();
+            outputClusters = conf.getBoolean("outputClusters", false); // Default is false (only centroids)
+            tolerance = conf.getDouble("tolerance", 50.0); // Default tolerance
+        }
+
         @Override
         protected void reduce(Text key, Iterable<Text> values, Context context)
                 throws IOException, InterruptedException {
@@ -108,27 +119,49 @@ public class kMeans {
             int xSum = 0;
             int ySum = 0;
             int numPoints = 0;
+            List<String> clusteredPoints = new ArrayList<>();
 
             for (Text val : values) {
                 String[] tokens = val.toString().split(",");
-                xSum += Integer.parseInt(tokens[0]); // Accumulate sum_x
-                ySum += Integer.parseInt(tokens[1]); // Accumulate sum_y
+                int x = Integer.parseInt(tokens[0]);
+                int y = Integer.parseInt(tokens[1]);
+                xSum += x;
+                ySum += y;
+                numPoints++;
 
-                // Combiner
-                numPoints += Integer.parseInt(tokens[2]); // Accumulate count
-
-                // Without combiner
-                // numPoints++;
+                if (outputClusters) {
+                    clusteredPoints.add(val.toString()); // Store points for later output
+                }
             }
 
-            Integer newX = Math.round(xSum / numPoints);
-            Integer newY = Math.round(ySum / numPoints);
-            String newCentroid = newX.toString() + "," + newY.toString();
-            String output = newCentroid + " Old:" + key.toString();
+            double newX = (double) xSum / numPoints;
+            double newY = (double) ySum / numPoints;
+            String newCentroid = newX + "," + newY;
 
-            context.write(new Text(output), NullWritable.get());
+            // Extract old centroid
+            String[] oldTokens = key.toString().split(",");
+            double oldX = Double.parseDouble(oldTokens[0]);
+            double oldY = Double.parseDouble(oldTokens[1]);
+
+            // Compute Euclidean distance for convergence check
+            double distance = Math.sqrt(Math.pow(newX - oldX, 2) + Math.pow(newY - oldY, 2));
+            if (distance > tolerance) {
+                hasConverged = false; // If any centroid moves more than the threshold, we haven't converged
+            }
+
+            if (!outputClusters) {
+                // (e.a) Output only cluster centers and convergence status
+                String output = newCentroid + " Converged: " + (hasConverged ? "Yes" : "No");
+                context.write(new Text(output), NullWritable.get());
+            } else {
+                // (e.b) Output data points and assigned cluster centers
+                for (String point : clusteredPoints) {
+                    context.write(new Text(point + " -> " + newCentroid), NullWritable.get());
+                }
+            }
         }
     }
+
 
     // Combiner Class
     public static class kMeansCombiner extends Reducer<Text, Text, Text, Text> {
@@ -177,11 +210,9 @@ public class kMeans {
 
         for (int iteration = 0; iteration < R; iteration++) {
             Job job = Job.getInstance(conf, "K-Means Iteration " + iteration);
-            System.out.println("Starting iteration " + iteration + " of " + R);
-            System.out.println("Centroid path: " + centroidPath.toString());
             job.setJarByClass(kMeans.class);
             job.setMapperClass(kMeansMapper.class);
-            job.setCombinerClass(kMeansCombiner.class); // Combiner
+            job.setCombinerClass(kMeansCombiner.class);
             job.setReducerClass(kMeansReducer.class);
 
             job.setMapOutputKeyClass(Text.class);
@@ -196,6 +227,12 @@ public class kMeans {
             Path iterOutput = new Path(output + "/iter" + iteration);
             FileOutputFormat.setOutputPath(job, iterOutput);
 
+            // Set output type based on whether it's the last iteration
+            boolean isFinalIteration = (iteration == R - 1);
+            boolean outputClusters = Boolean.parseBoolean(args[6]); // Get parameter from command line
+
+            conf.setBoolean("outputClusters", isFinalIteration && outputClusters);
+
             job.waitForCompletion(true);
 
             Path newCentroids = new Path(iterOutput + "/part-r-00000");
@@ -205,11 +242,14 @@ public class kMeans {
                 break;
             }
 
-            centroidPath = newCentroids; // Move to the next iteration
+            centroidPath = newCentroids;
         }
+
     }
 
     // **Helper Function: Check if centroids have converged**
+
+
     private static boolean hasConverged(FileSystem fs, Path centroidPath, double tolerance) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(centroidPath)));
 
