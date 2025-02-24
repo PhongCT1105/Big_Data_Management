@@ -23,10 +23,9 @@ public class Project2Test {
         input[3] = "10"; // Number of clusters (K)
         input[4] = "1"; // Number of iterations (R)
         input[5] = "False"; // No convergence check
-        input[6] = "False"; // Output only cluster centers
 
         try {
-            kMeans.main(input);
+            kMeansAD.main(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -42,7 +41,7 @@ public class Project2Test {
         input[4] = "6"; // R = 6 iterations
         input[5] = "False"; // No convergence check
         try {
-            kMeans.main(input);
+            kMeansAD.main(input);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -53,6 +52,22 @@ public class Project2Test {
         String[] input = new String[6];
         input[0] = path + "points.csv";
         input[1] = output + "/tolerance";
+        input[2] = path + "k_seeds.csv";
+        input[3] = "10"; // K value
+        input[4] = "20"; // Maximum iterations R = 20
+        input[5] = "True"; // Enable convergence checking (FinalReducer should be run)
+        try {
+            kMeansAD.main(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void newOutputs() {
+        String[] input = new String[6];
+        input[0] = path + "points.csv";
+        input[1] = output + "/newOutput";
         input[2] = path + "k_seeds.csv";
         input[3] = "10"; // K value
         input[4] = "20"; // Maximum iterations R = 20
