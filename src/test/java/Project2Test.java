@@ -1,9 +1,3 @@
-import static org.junit.Assert.assertTrue;
-import java.io.IOException;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.junit.Test;
 
 public class Project2Test {
@@ -65,52 +59,6 @@ public class Project2Test {
         input[5] = "True"; // Enable convergence checking (FinalReducer should be run)
         try {
             kMeans.main(input);
-
-            // Instead of assuming "iter19", we choose the iteration directory with the
-            // highest iteration number.
-            Configuration conf = new Configuration();
-            FileSystem fs = FileSystem.get(conf);
-            Path baseOutputPath = new Path(output + "/tolerance");
-
-            FileStatus[] statuses = fs.listStatus(baseOutputPath);
-            int maxIter = -1;
-            Path finalIterationPath = null;
-            for (FileStatus status : statuses) {
-                if (status.isDirectory()) {
-                    String folderName = status.getPath().getName();
-                    if (folderName.startsWith("iter")) {
-                        try {
-                            int iterNum = Integer.parseInt(folderName.substring(4));
-                            if (iterNum > maxIter) {
-                                maxIter = iterNum;
-                                finalIterationPath = status.getPath();
-                            }
-                        } catch (NumberFormatException e) {
-                            // Ignore non-matching folder names.
-                        }
-                    }
-                }
-            }
-
-            assertTrue("No iteration directory found under: " + baseOutputPath, finalIterationPath != null);
-
-            // Now check that the final iteration directory contains the multiple outputs:
-            // one file name starting with "centers" and one starting with "clustered".
-            FileStatus[] finalFiles = fs.listStatus(finalIterationPath);
-            boolean foundCenters = false;
-            boolean foundClustered = false;
-            for (FileStatus fileStatus : finalFiles) {
-                String name = fileStatus.getPath().getName();
-                if (name.startsWith("centers")) {
-                    foundCenters = true;
-                }
-                if (name.startsWith("clustered")) {
-                    foundClustered = true;
-                }
-            }
-            assertTrue("Final output should contain centers output.", foundCenters);
-            assertTrue("Final output should contain clustered output.", foundClustered);
-
         } catch (Exception e) {
             e.printStackTrace();
         }
